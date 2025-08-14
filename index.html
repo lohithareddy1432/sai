@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Automatic Light On/Off (Theme Switch)</title>
+  <style>
+    /* Base design tokens */
+    :root {
+      --bg: #ffffff;
+      --text: #0f172a;
+      --muted: #475569;
+      --card: #f8fafc;
+      --accent: #2563eb;
+      --outline: #e2e8f0;
+    }
+
+    /* Dark theme tokens */
+    [data-theme="dark"] {
+      --bg: #0b1220;
+      --text: #e5e7eb;
+      --muted: #9aa4b2;
+      --card: #111827;
+      --accent: #60a5fa;
+      --outline: #22304a;
+    }
+
+    /* Respect user's OS preference when in "auto" mode (no data-theme set) */
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme]) {
+        --bg: #0b1220;
+        --text: #e5e7eb;
+        --muted: #9aa4b2;
+        --card: #111827;
+        --accent: #60a5fa;
+        --outline: #22304a;
+      }
+    }
+
+    /* Page styles */
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    }
+
+    .wrap {
+      min-height: 100%;
+      display: grid;
+      place-items: center;
+      padding: 3rem 1rem;
+    }
+
+    .card {
+      width: 100%;
+      max-width: 720px;
+      background: var(--card);
+      border: 1px solid var(--outline);
+      border-radius: 16px;
+      padding: 2rem;
+      box-shadow: 0 6px 30px rgba(0, 0, 0, 0.08);
+    }
+
+    h1 {
+      margin: 0 0 0.25rem;
+      font-size: 1.75rem;
+      letter-spacing: -0.015em;
+    }
+    p {
+      margin: 0.5rem 0 1.5rem;
+      color: var(--muted);
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+      margin-bottom: 1.25rem;
+    }
+
+    .btn, select {
+      appearance: none;
+      border: 1px solid var(--outline);
+      background: transparent;
+      color: var(--text);
+      padding: 0.6rem 0.9rem;
+      border-radius: 12px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .btn:hover, select:hover { border-color: var(--accent); }
+    .btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+    }
+
+    /* Cute demo lightbulb that turns on/off with theme */
+    .bulb {
+      --bulb-off: #9ca3af;
+      --bulb-on: #f59e0b;
+      width: 120px; height: 120px;
+      border-radius: 50%;
+      margin: 1rem auto 0.5rem;
+      position: relative;
+      transition: box-shadow 0.3s ease, background 0.3s ease;
+      background: radial-gradient(circle at 50% 40%, var(--bulb-on) 0%, var(--bulb-on) 12%, #2220 13% 100%);
+      box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.0);
+    }
+    /* Off when light theme; On when dark theme (auto matches OS) */
+    :root[data-theme="light"] .bulb,
+    :root:not([data-theme]) .bulb { /* default (auto-light) */
+      background: radial-gradient(circle at 50% 40%, var(--bulb-off) 0%, var(--bulb-off) 12%, #2220 13% 100%);
+    }
+    [data-theme="dark"] .bulb {
+      box-shadow: 0 0 40px 12px rgba(245, 158, 11, 0.25);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme]) .bulb {
+        /* auto-dark */
+        box-shadow: 0 0 40px 12px rgba(245, 158, 11, 0.25);
+        background: radial-gradient(circle at 50% 40%, var(--bulb-on) 0%, var(--bulb-on) 12%, #2220 13% 100%);
+      }
+    }
+
+    .hint {
+      text-align: center;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    code.kbd {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      padding: 0.2rem 0.4rem;
+      border: 1px solid var(--outline);
+      border-radius: 6px;
+      background: transparent;
+    }
+  </style>
+
+  <script>
+    /**
+     * Theme manager
+     * Modes:
+     *  - "auto" (default): follow OS preference via prefers-color-scheme
+     *  - "light": force light
+     *  - "dark": force dark
+     */
+    (function () {
+      const STORAGE_KEY = "theme-mode"; // 'auto' | 'light' | 'dark'
+      const root = document.documentElement;
+
+      function getStoredMode() {
+        try { return localStorage.getItem(STORAGE_KEY) || "auto"; }
+        catch { return "auto"; }
+      }
+
+      function setStoredMode(mode) {
+        try { localStorage.setItem(STORAGE_KEY, mode); }
+        catch {}
+      }
+
+      function applyMode(mode) {
+        // Remove any explicit theme to allow auto(OS) to take effect
+        if (mode === "auto") {
+          root.removeAttribute("data-theme");
+          return;
+        }
+        root.setAttribute("data-theme", mode);
+      }
+
+      // Initialize early to avoid FOUC
+      const initialMode = getStoredMode();
+      applyMode(initialMode);
+
+      // Expose helpers globally for the UI controls
+      window.Theme = {
+        get mode() { return getStoredMode(); },
+        set mode(next) { setStoredMode(next); applyMode(next); updateSelect(next); },
+        toggle() {
+          const current = getStoredMode();
+          const next = current === "dark" ? "light" : "dark";
+          setStoredMode(next); applyMode(next); updateSelect(next);
+        }
+      };
+
+      function updateSelect(value) {
+        const sel = document.getElementById("modeSelect");
+        if (sel && sel.value !== value) sel.value = value;
+      }
+
+      // Keep the UI in sync on load
+      document.addEventListener("DOMContentLoaded", () => updateSelect(getStoredMode()));
+    })();
+  </script>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Automatic Light On/Off</h1>
+      <p>
+        By default, this page follows your system’s Light/Dark preference (“Auto”).
+        You can manually switch and your choice will be remembered.
+      </p>
+
+      <div class="controls">
+        <button class="btn primary" onclick="Theme.toggle()" aria-label="Toggle light/dark">
+          Toggle Light / Dark
+        </button>
+
+        <label for="modeSelect" class="sr-only">Theme mode</label>
+        <select id="modeSelect" onchange="Theme.mode=this.value" title="Theme mode">
+          <option value="auto">Auto (follow system)</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </div>
+
+      <div class="bulb" aria-hidden="true"></div>
+      <p class="hint">
+        Tip: On macOS/iOS, toggle system appearance in <code class="kbd">Settings → Appearance</code>;
+        on Windows, use <code class="kbd">Settings → Personalization → Colors</code>.
+        With “Auto” selected, this page will follow along.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
